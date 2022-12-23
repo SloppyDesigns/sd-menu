@@ -14,10 +14,43 @@
 
 
 sdmenu = sdmenu or {}
-sdmenu.menuVersion = Config.SDMenuVersion
-sdmenu.inputVersion = Config.SDInputVersion
-
+sdmenu.autodetect = Config.SDAutoVersion or false
 local ResourceName = GetCurrentResourceName()
+
+local function GetMenuVersion()
+    if GetResourceState('nh-context') == "started" then
+        if pcall(function() exports["nh-context"]:CancelMenu() end) then
+            return 'v2'
+        else
+            return 'v1'
+        end
+    elseif GetResourceState('zf_context') == "started" then
+        return 'zf'
+    elseif GetResourceState('qb-menu') == "started" then
+        return 'qb'
+    elseif GetResourceState('ox_lib') == "started" then
+        return 'ox'
+    end
+end
+
+local function GetInputVersion()
+    if GetResourceState('nh-keyboard') == "started" then
+        if pcall(function() exports["nh-keyboard"]:CancelKeyboard() end) then
+            return 'v2'
+        else
+            return 'v1'
+        end
+    elseif GetResourceState('zf_dialog') == "started" then
+        return 'zf'
+    elseif GetResourceState('qb-input') == "started" then
+        return 'qb'
+    elseif GetResourceState('ox_lib') == "started" then
+        return 'ox'
+    end
+end
+
+sdmenu.menuVersion = (sdmenu.autodetect and GetMenuVersion() or Config.SDMenuVersion)
+sdmenu.inputVersion = (sdmenu.autodetect and GetInputVersion() or Config.SDInputVersion)
 
 local function FontAwesomeIcon(icon)
     result = {};
@@ -42,25 +75,26 @@ local function Unpack(arguments, i)
     end
 end
 
-local function UnpackInput(kb, i)
-    if not kb then return end
+local function UnpackInput(arguments, i)
+    if not arguments then return end
     local index = i or 1
     
-    if index <= #kb then
-        return kb[index].input, UnpackInput(kb, index + 1)
+    if index <= #arguments then
+        return arguments[index].input, UnpackInput(arguments, index + 1)
     end
 end
 
 -- Create Menu
 local function CreateMenu(data)
     local menuData = {}
+    local menuHeader = nil
     for k, v in pairs(data) do
         local menuId = #menuData+1
-        if v.icon and v.icon ~= "" and sdmenu.menuVersion ~= 'qb' then
+        if v.icon and v.icon ~= "" and sdmenu.menuVersion ~= 'qb' and sdmenu.menuVersion ~= 'ox' then
             menuData[menuId] = {
                 header = '<img style="'..sdmenu.iconColor..'" width="'..sdmenu.iconSize..'" height="'..sdmenu.iconSize..'" src="'..FontAwesomeIcon(v.icon)..'"</img>&nbsp;&nbsp;'..(v.header or ''),
             }
-        else
+        elseif sdmenu.menuVersion ~= 'ox' then
             menuData[menuId] = {
                 header = v.header or '',
             }
@@ -135,12 +169,51 @@ local function CreateMenu(data)
             else
                 menuData[menuId].params.args.arguments = {}
             end
+        elseif sdmenu.menuVersion == 'ox' then
+            if v.header and (v.disabled or not v.params) then
+                menuHeader = v.header
+            else
+                if v.header and v.txt then
+                    menuData[menuId] = {
+                        title = v.header,
+                        description = v.txt
+                    }
+                elseif v.header and not v.txt then
+                    menuData[menuId] = {
+                        title = v.header,
+                    }
+                elseif not v.header and v.txt then
+                    menuData[menuId] = {
+                        title = v.txt,
+                    }
+                end
+                menuData[menuId].args = {}
+                if v.params and v.params.event then
+                    menuData[menuId].event = ResourceName .. ':interceptor'
+                    menuData[menuId].args.event = v.params.event
+                end
+                if v.params and v.params.server then
+                    menuData[menuId].args.server = v.params.server
+                end
+                if v.params and v.params.args then
+                    menuData[menuId].args.arguments = v.params.args
+                else
+                    menuData[menuId].args.arguments = {}
+                end
+                if v.icon then
+                    menuData[menuId].icon = v.icon
+                end
+            end
         end
     end
     if sdmenu.menuVersion == 'v1' then TriggerEvent('nh-context:sendMenu', menuData) end
     if sdmenu.menuVersion == 'zf' then TriggerEvent('nh-context:sendMenu', menuData) end
     if sdmenu.menuVersion == 'v2' then TriggerEvent('nh-context:createMenu', menuData) return end
     if sdmenu.menuVersion == 'qb' then exports['qb-menu']:openMenu(menuData) end
+    if sdmenu.menuVersion == 'ox' then
+        lib.registerContext({ id = 'sd-menu', title = menuHeader, options = menuData })
+        lib.showContext('sd-menu')
+    end
 end
 
 -- Menu Interceptor 
@@ -160,6 +233,7 @@ RegisterNetEvent(ResourceName .. ':interceptor', function(data)
     end
 end)
 
+-- Create Input
 local function CreateInput(data)
     local inputData = {}
     if sdmenu.inputVersion == 'v1' then
@@ -200,6 +274,11 @@ local function CreateInput(data)
                 name = k
             })
         end
+    elseif sdmenu.inputVersion == 'ox' then
+        inputData.rows = {}
+        for k, v in pairs(data.inputs) do
+            table.insert(inputData.rows, v.text)
+        end
     end
     if sdmenu.inputVersion == 'v1' then 
         local input = exports["nh-keyboard"]:KeyboardInput(inputData)
@@ -213,17 +292,26 @@ local function CreateInput(data)
         return exports["nh-keyboard"]:Keyboard(inputData)
     end
     if sdmenu.inputVersion == 'qb' then
-        local inputReturn = promise.new()
         local input = exports["qb-input"]:ShowInput(inputData)
-        if input ~= nil then
-            local args = {}
-            for k, v in pairs(input) do
-                table.insert(args, { input = v })
-            end
-            inputReturn:resolve(UnpackInput(args))
-            return input and true or false, Citizen.Await(inputReturn)
+        if input == nil then return end
+        local converted_input = {}
+        for k, v in pairs(input) do
+            converted_input[tonumber(k)] = v
         end
-        
+        local args = {}
+        for k, v in ipairs(converted_input) do
+            table.insert(args, { input = v })
+        end
+        return input and true or false, UnpackInput(args)
+    end
+    if sdmenu.inputVersion == 'ox' then
+        local input = lib.inputDialog(data.header, inputData.rows)
+        if input == nil then return end
+        local args = {}
+        for k, v in ipairs(input) do
+            table.insert(args, { input = v })
+        end
+        return input and true or false, UnpackInput(args)
     end
 end
 

@@ -35,10 +35,11 @@ RegisterCommand('sdmenu', function(source, args, rawCommand)
         {
             disabled = true,
             header = 'My Apple Menu',
-            icon = 'fa-solid fa-apple-whole',
         },
         {
+            header = 'Green Apples',
             txt = 'Get Some Green Apples',
+            icon = 'fa-solid fa-apple-whole',
             params = {
                 event = 'sdmenu-apples',
                 args = {
@@ -47,7 +48,9 @@ RegisterCommand('sdmenu', function(source, args, rawCommand)
             }
         },
         {
+            header = 'Red Apples',
             txt = 'Get Some Red Apples',
+            icon = 'fa-solid fa-apple-whole',
             params = {
                 event = 'sdmenu-apples',
                 args = {
@@ -64,7 +67,7 @@ RegisterNetEvent('sdmenu-apples', function(type)
         inputs = {
             {
                 text = 'Amount'
-            }
+            },
         }
     })
     if input then

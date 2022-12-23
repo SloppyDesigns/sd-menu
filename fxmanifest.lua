@@ -6,6 +6,7 @@ description 'SD Menu Example'
 version '1.0.0'
 
 shared_scripts {
+    '@ox_lib/init.lua',
     'config.lua',
     'lib/sd-menu.lua',
 }
@@ -13,3 +14,5 @@ shared_scripts {
 client_scripts {
     'client/main.lua'
 }
+
+lua54 'yes'
