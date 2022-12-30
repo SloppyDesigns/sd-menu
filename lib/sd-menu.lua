@@ -103,21 +103,23 @@ local function CreateMenu(data)
             menuData[menuId].id = menuId
             menuData[menuId].txt = v.txt or ''
 
-            menuData[menuId].params = {}
-            menuData[menuId].params.arg1 = {}
-            if v.params and v.params.event then
-                menuData[menuId].params.event = ResourceName .. ':interceptor'
-                menuData[menuId].params.arg1.event = v.params.event
-            end
+            if v.params then
+                menuData[menuId].params = {}
+                menuData[menuId].params.arg1 = {}
+                if v.params and v.params.event then
+                    menuData[menuId].params.event = ResourceName .. ':interceptor'
+                    menuData[menuId].params.arg1.event = v.params.event
+                end
 
-            if v.params and v.params.server then
-                menuData[menuId].params.arg1.server = v.params.server
-            end
+                if v.params and v.params.server then
+                    menuData[menuId].params.arg1.server = v.params.server
+                end
 
-            if v.params and v.params.args then
-                menuData[menuId].params.arg1.arguments = v.params.args
-            else
-                menuData[menuId].params.arg1.arguments = {}
+                if v.params and v.params.args then
+                    menuData[menuId].params.arg1.arguments = v.params.args
+                else
+                    menuData[menuId].params.arg1.arguments = {}
+                end
             end
         elseif sdmenu.menuVersion == 'zf' then
             menuData[menuId].id = menuId
@@ -170,7 +172,7 @@ local function CreateMenu(data)
                 menuData[menuId].params.args.arguments = {}
             end
         elseif sdmenu.menuVersion == 'ox' then
-            if v.header and (v.disabled or not v.params) then
+            if v.header and not v.params then
                 menuHeader = v.header
             else
                 if v.header and v.txt then
@@ -211,8 +213,8 @@ local function CreateMenu(data)
     if sdmenu.menuVersion == 'v2' then TriggerEvent('nh-context:createMenu', menuData) return end
     if sdmenu.menuVersion == 'qb' then exports['qb-menu']:openMenu(menuData) end
     if sdmenu.menuVersion == 'ox' then
-        lib.registerContext({ id = 'sd-menu', title = menuHeader, options = menuData })
-        lib.showContext('sd-menu')
+        exports.ox_lib:registerContext({ id = 'sd-menu', title = menuHeader, options = menuData })
+        exports.ox_lib:showContext('sd-menu')
     end
 end
 
@@ -305,7 +307,7 @@ local function CreateInput(data)
         return input and true or false, UnpackInput(args)
     end
     if sdmenu.inputVersion == 'ox' then
-        local input = lib.inputDialog(data.header, inputData.rows)
+        local input = exports.ox_lib:inputDialog(data.header, inputData.rows)
         if input == nil then return end
         local args = {}
         for k, v in ipairs(input) do
