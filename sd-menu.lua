@@ -17,6 +17,39 @@ sdmenu = sdmenu or {}
 sdmenu.autodetect = Config.SDAutoVersion or false
 local ResourceName = GetCurrentResourceName()
 
+local function tPrint(tbl, indent)
+    indent = indent or 0
+    if type(tbl) == 'table' then
+        for k, v in pairs(tbl) do
+            local tblType = type(v)
+            local formatting = ("%s ^3%s:^0"):format(string.rep("  ", indent), k)
+
+            if tblType == "table" then
+                print(formatting)
+                tPrint(v, indent + 1)
+            elseif tblType == 'boolean' then
+                print(("%s^1 %s ^0"):format(formatting, v))
+            elseif tblType == "function" then
+                print(("%s^9 %s ^0"):format(formatting, v))
+            elseif tblType == 'number' then
+                print(("%s^5 %s ^0"):format(formatting, v))
+            elseif tblType == 'string' then
+                print(("%s ^2'%s' ^0"):format(formatting, v))
+            else
+                print(("%s^2 %s ^0"):format(formatting, v))
+            end
+        end
+    else
+        print(("%s ^0%s"):format(string.rep("  ", indent), tbl))
+    end
+end
+
+local function exportHandler(resource, exportName, func)
+    AddEventHandler(('__cfx_export_%s_%s'):format(resource, exportName), function(cb)
+        cb(func)
+    end)
+end
+
 local function GetMenuVersion()
     if GetResourceState('nh-context') == "started" then
         if pcall(function() exports["nh-context"]:CancelMenu() end) then
@@ -69,7 +102,7 @@ end
 local function Unpack(arguments, i)
     if not arguments then return end
     local index = i or 1
-    
+
     if index <= #arguments then
         return arguments[index], Unpack(arguments, index + 1)
     end
@@ -88,7 +121,7 @@ end
 local function CreateMenu(data)
     local menuData = {}
     local menuHeader = nil
-    for k, v in pairs(data) do
+    for _, v in pairs(data) do
         local menuId = #menuData+1
         if v.icon and v.icon ~= "" and sdmenu.menuVersion ~= 'qb' and sdmenu.menuVersion ~= 'ox' then
             menuData[menuId] = {
@@ -132,7 +165,7 @@ local function CreateMenu(data)
                 menuData[menuId].params.args.event = v.params.event
             end
 
-            if v.params and v.params.args then
+            if v.params and v.params.server then
                  menuData[menuId].params.args.server = v.params.server
             end
 
@@ -172,7 +205,7 @@ local function CreateMenu(data)
                 menuData[menuId].params.args.arguments = {}
             end
         elseif sdmenu.menuVersion == 'ox' then
-            if v.header and not v.params then
+            if v.header and not v.params and menuHeader == nil then
                 menuHeader = v.header
             else
                 if v.header and v.txt then
@@ -209,7 +242,7 @@ local function CreateMenu(data)
         end
     end
     if sdmenu.menuVersion == 'v1' then TriggerEvent('nh-context:sendMenu', menuData) end
-    if sdmenu.menuVersion == 'zf' then TriggerEvent('nh-context:sendMenu', menuData) end
+    if sdmenu.menuVersion == 'zf' then TriggerEvent('zf_context:openMenu', menuData) end
     if sdmenu.menuVersion == 'v2' then TriggerEvent('nh-context:createMenu', menuData) return end
     if sdmenu.menuVersion == 'qb' then exports['qb-menu']:openMenu(menuData) end
     if sdmenu.menuVersion == 'ox' then
@@ -314,6 +347,243 @@ local function CreateInput(data)
             table.insert(args, { input = v })
         end
         return input and true or false, UnpackInput(args)
+    end
+end
+
+-- Convert Only Works Running sd-menu standalone
+if ResourceName == 'sd-menu' then
+
+    -- Convert nh-context v1
+    if sdmenu.menuVersion ~= 'v1' and sdmenu.menuVersion ~= 'zf' then
+        RegisterNetEvent('nh-context:sendMenu', function(data)
+            local menuData = {}
+            for _, v in pairs(data) do
+                local menuId = #menuData+1
+                menuData[menuId] = {}
+                if v.header then menuData[menuId].header = v.header end
+                if v.txt then menuData[menuId].txt = v.txt end
+                if v.params then
+                    menuData[menuId].params = {}
+                    menuData[menuId].params.event = v.params.event
+                    if v.params.arg1 then
+                        menuData[menuId].params.args = {}
+                        table.insert(menuData[menuId].params.args, v.params.arg1)
+                    end
+                end
+            end
+            CreateMenu(menuData)
+        end)
+    end
+
+    -- Convert nh-keyboard v1
+    if sdmenu.inputVersion ~= 'v1' then
+        exportHandler('nh-keyboard', 'KeyboardInput', function(data)
+            local inputData = {}
+            inputData.header = data.header
+            inputData.inputs = {}
+            for _, v in pairs(data.rows) do
+                inputData.inputs[#inputData.inputs+1] = {
+                    text = v.txt
+                }
+            end
+            local inputs = table.pack(CreateInput(inputData))
+            table.remove(inputs, 1)
+            local returninputs = {}
+            for _, v in ipairs(inputs) do
+                table.insert(returninputs, { input  = v })
+            end
+            return returninputs
+        end)
+    end
+
+    -- Convert zf_context
+    if sdmenu.menuVersion ~= 'zf' and sdmenu.menuVersion ~= 'v1' then
+        RegisterNetEvent('zf_context:openMenu', function(data)
+            local menuData = {}
+            for _, v in pairs(data) do
+                local menuId = #menuData + 1
+                menuData[menuId] = {}
+                if v.header then menuData[menuId].header = v.header end
+                if v.txt then menuData[menuId].txt = v.txt end
+                if v.params then
+                    menuData[menuId].params = {}
+                    menuData[menuId].params.event = v.params.event
+                    if v.params.isServer then menuData[menuId].params.server = v.params.isServer end
+                    if v.params.args then
+                        menuData[menuId].params.args = {}
+                        table.insert(menuData[menuId].params.args, v.params.args)
+                    end
+                end
+            end
+            CreateMenu(menuData)
+        end)
+
+        exportHandler('zf_context', 'openMenu', function(data)
+            local menuData = {}
+            for _, v in pairs(data) do
+                local menuId = #menuData + 1
+                menuData[menuId] = {}
+                if v.header then menuData[menuId].header = v.header end
+                if v.txt then menuData[menuId].txt = v.txt end
+                if v.params then
+                    menuData[menuId].params = {}
+                    menuData[menuId].params.event = v.params.event
+                    if v.params.isServer then menuData[menuId].params.server = v.params.isServer end
+                    if v.params.args then
+                        menuData[menuId].params.args = {}
+                        table.insert(menuData[menuId].params.args, v.params.args)
+                    end
+                end
+            end
+            CreateMenu(menuData)
+        end)
+    end
+
+    -- Convert zf_dialog
+    if sdmenu.inputVersion ~= 'zf' then
+        exportHandler('zf_dialog', 'DialogInput', function(data)
+            local inputData = {}
+            inputData.header = data.header
+            inputData.inputs = {}
+            for _, v in pairs(data.rows) do
+                inputData.inputs[#inputData.inputs + 1] = {
+                    text = v.txt
+                }
+            end
+            local inputs = table.pack(CreateInput(inputData))
+            table.remove(inputs, 1)
+            local returninputs = {}
+            for _, v in ipairs(inputs) do
+                table.insert(returninputs, { input = v })
+            end
+            return returninputs
+        end)
+    end
+
+    -- Convert nh-context v2
+    if sdmenu.menuVersion ~= 'v2' then
+        
+        RegisterNetEvent('nh-context:createMenu', function(data)
+            local menuData = {}
+            for _, v in pairs(data) do
+                local menuId = #menuData + 1
+                menuData[menuId] = {}
+                if v.header then menuData[menuId].header = v.header end
+                if v.context then menuData[menuId].txt = v.context end
+                if v.event then
+                    menuData[menuId].params = {}
+                    menuData[menuId].params.event = v.event 
+                end
+                if v.server then menuData[menuId].params.server = v.server end
+                if v.args and next(v.args) then
+                    menuData[menuId].params.args = v.args
+                end
+            end
+            CreateMenu(menuData)
+        end)
+
+        exportHandler('nh-context', 'ContextMenu', function(data)
+            local menuData = {}
+            for _, v in pairs(data) do
+                local menuId = #menuData + 1
+                menuData[menuId] = {}
+                if v.header then menuData[menuId].header = v.header end
+                if v.context then menuData[menuId].txt = v.context end
+                if v.event then
+                    menuData[menuId].params = {}
+                    menuData[menuId].params.event = v.event
+                end
+                if v.server then menuData[menuId].params.server = v.server end
+                if v.args and next(v.args) then
+                    menuData[menuId].params.args = v.args
+                end
+            end
+            CreateMenu(menuData)
+        end)
+    end
+
+    -- Convert nh-keyboard v2
+    if sdmenu.inputVersion ~= 'v2' then
+        exportHandler('nh-keyboard', 'Keyboard', function(data)
+            local inputData = {}
+            inputData.header = data.header
+            inputData.inputs = {}
+            for _, v in pairs(data.rows) do
+                inputData.inputs[#inputData.inputs + 1] = {
+                    text = v
+                }
+            end
+            return CreateInput(inputData)
+        end)
+    end
+
+    -- Convert qb-menu
+    if sdmenu.menuVersion ~= 'qb' then
+        exportHandler('qb-menu', 'openMenu', function(data)
+            local menuData = {}
+            for _, v in pairs(data) do
+                local menuId = #menuData + 1
+                menuData[menuId] = {}
+                if v.header then menuData[menuId].header = v.header end
+                if v.txt then menuData[menuId].txt = v.txt end
+                if v.params then
+                    menuData[menuId].params = {}
+                    menuData[menuId].params.event = v.params.event
+                    if v.params.isServer then menuData[menuId].params.server = v.params.isServer end
+                    if v.icon then menuData[menuId].icon = v.icon end
+                    if v.params.args then
+                        menuData[menuId].params.args = {}
+                        table.insert(menuData[menuId].params.args, v.params.args)
+                    end
+                end
+            end
+            CreateMenu(menuData)
+        end)
+    end
+
+    -- Convert qb-input
+    if sdmenu.inputVersion ~= 'qb' then
+        exportHandler('qb-input', 'ShowInput', function(data)
+            local inputData = {}
+            inputData.header = data.header
+            inputData.inputs = {}
+            tPrint(data)
+            for _, v in pairs(data.inputs) do
+                inputData.inputs[#inputData.inputs + 1] = {
+                    text = v.text
+                }
+            end
+            return CreateInput(inputData)
+        end)
+    end
+
+    -- Convert ox_lib
+    if sdmenu.menuVersion ~= 'ox' then
+        local menus = {}
+        exportHandler('ox_lib', 'registerContext', function(data)
+            local menuData = {}
+            menuData[#menuData+1] = {
+                header = data.title
+            }
+            for _, v in pairs(data.options) do
+                local menuId = #menuData + 1
+                menuData[menuId] = {}
+                if v.title then menuData[menuId].header = v.title end
+                if v.description then menuData[menuId].txt = v.description end
+                if v.args and next(v.args) then
+                    menuData[menuId].params = {}
+                    menuData[menuId].params.event = v.event
+                    if v.serverEvent then menuData[menuId].params.server = true end
+                    if v.icon then menuData[menuId].icon = v.icon end
+                    menuData[menuId].params.args = {}
+                    table.insert(menuData[menuId].params.args, v.args)
+                end
+            end
+            menus[data.id] = menuData
+        end)
+        exportHandler('ox_lib', 'showContext', function(id)
+            CreateMenu(menus[id])
+        end)
     end
 end
 
